@@ -1,0 +1,77 @@
+import math
+import csv
+import xml.etree.ElementTree as ET
+import rhinoscriptsyntax as rs
+
+#Code requires an input KML File that takes lines drawn in GoogleEarth and places them into Grasshopper as points.
+#This code is then translated through the Geo to XYZ component from Ghowl
+tree = ET.parse(path)
+root = tree.getroot()
+#The link in findall depends on your version of GoogleEarth, make sure to check it by opening the KML file in a text editor
+lineStrings = tree.findall('.//{http://www.opengis.net/kml/2.2}LineString')
+nameStrings = tree.findall('.//{http://www.opengis.net/kml/2.2}Placemark')
+Point = tree.findall('.//{http://www.opengis.net/kml/2.2}Point')
+
+#The carport Type is a line type identifier used for a specific project, 
+#it simply uses a key word to bake the lines into a specific layer
+CarportType = []
+for attributes in nameStrings:
+    for subAttribute in attributes:
+        if subAttribute.tag == '{http://www.opengis.net/kml/2.2}name':
+            CarportType.append(subAttribute.text)
+print CarportType
+LinePoints = []
+Lines = []
+for attributes in lineStrings:
+    for subAttribute in attributes:
+        if subAttribute.tag == '{http://www.opengis.net/kml/2.2}coordinates':
+            Lines.append(subAttribute.text)
+X = str(Lines).split(' ')
+
+Y = []
+for i in X:
+    Y.append(str(i).replace('n','').replace('t','').replace('[','').replace(']','').replace('\\','').replace('\'',''))
+LinePoints = [x for x in Y if len(x) > 2]
+#GEO = LinePoints
+
+Points_Cleaned = []
+X = str(LinePoints).split(',')
+for i in X:
+    Points_Cleaned.append(str(i).replace('[','').replace(']','').replace('\'',''))
+
+#Geodetic Points
+Points_Longitude = Points_Cleaned[0:][::3]
+Points_Latitude = Points_Cleaned[1:][::3]
+
+GEO = []
+for i in range(len(Points_Longitude)):
+    GEO.append(str(Points_Latitude[i])+','+str(Points_Longitude[i])+','+str(0))
+GEO_Origin = GEO[0]
+
+def radius (B):
+   B=math.radians(B) #converting into radians
+   a = 6378.137  #Radius at sea level at equator
+   b = 6356.752  #Radius at poles
+   c = (a**2*math.cos(B))**2
+   d = (b**2*math.sin(B))**2
+   e = (a*math.cos(B))**2
+   f = (b*math.sin(B))**2
+   R = math.sqrt((c+d)/(e+f))
+   return R
+R = radius (float(Points_Latitude[0]))
+
+#Based on David M's code on stack overflow
+brng = math.pi/4 #Bearing is 90 degrees converted to radians.
+d = math.sqrt(0.01+0.01) #Distance in km
+lat1 = math.radians(float(Points_Latitude[0])) #Current lat point converted to radians
+lon1 = math.radians(float(Points_Longitude[0])) #Current long point converted to radians
+lat2 = math.asin( math.sin(lat1)*math.cos(d/R) +
+    math.cos(lat1)*math.sin(d/R)*math.cos(brng))
+lon2 = lon1 + math.atan2(math.sin(brng)*math.sin(d/R)*math.cos(lat1),
+            math.cos(d/R)-math.sin(lat1)*math.sin(lat2))
+lat2 = math.degrees(lat2)
+lon2 = math.degrees(lon2)
+Pt_2 = str(lat2)+","+str(lon2)
+
+EBPLat = Points_Latitude[0]
+EBPLon = Points_Longitude[0]
