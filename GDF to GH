@@ -1,0 +1,119 @@
+#COPYRIGHT NOTICE
+#This script is developed by Sanjay Somanath
+#The purpose of this script is to take a GDF gile created in
+#GEPHY and redraw it as geometry in GH
+#Script written on 19th July 2019
+
+#Also, sorry about the sloppy scripting in advance!
+#I've only started working out things in python over the past week or so
+
+import rhinoscriptsyntax as rs
+import csv
+from Rhino.Geometry import *
+
+#Parse the GDF For circle coordinates and sizes
+Node_Text=[]
+node_dia = []
+node_coord = []
+with open(GDF_Filepath) as csvfile:
+    gdf_file = csv.DictReader(csvfile)
+    for row in gdf_file:
+        node_coord.append((row["x DOUBLE"],row["y DOUBLE"]))
+        if (None,None) in node_coord: 
+            node_coord.remove((None,None))
+
+
+#The GDF File has node information first and then the edge information,
+#The just cleans off the edge information for now, let's worry about that later
+#Probably poor data management but still gets the job done
+        Node_Text.append((row["label VARCHAR"]))
+        Node_Text = Node_Text[:len(node_coord)]
+        node_dia.append((row["width DOUBLE"]))
+        node_dia = node_dia[:len(node_coord)]
+
+
+#Number of Rooms to get number of color values for the Color Scheme
+Number_of_Rooms = len(node_dia)
+
+#Generates cirlces using the information we parsed earlier
+#There's probably a better way to transfer data as well, I know
+#There are a lot of redundant data assignments but I'll work on that
+
+Graph_Circles = node_dia
+Node_Points = []
+Circles = []
+Graph_Circles = []
+for i in range(len(node_dia)):
+    Node_Points.append((rs.CreatePoint(float(node_coord[i][0]),float(node_coord[i][1]))))
+for i in range(len(node_dia)):
+    Circles.append(rs.AddCircle(Node_Points[i],float(node_dia[i])))
+
+#Turning the Circle curve to a surface since we want the curves geometry
+#for making a nice outline to out circle surfaces
+Graph_Circles = rs.AddPlanarSrf(Circles)
+
+#Drawing the lines or edges. In gephi they're called edges but I didnt 
+#really think of that when I started but yeah, they're called lines now
+#Identifying Nodes for start point and end point and the thickness of the lines
+#Better to fix that in Gephi to begin with
+start_room = []
+end_room = []
+Line_Thk = []
+
+with open(GDF_Filepath) as csvfile:
+    gdf_file = csv.DictReader(csvfile)
+    for row in gdf_file:
+        end_room.append((row["label VARCHAR"]))
+        start_room.append((row["nodedef> name VARCHAR"]))
+        Line_Thk.append((row["width DOUBLE"]))
+start_room = start_room[len(node_dia)+1:]
+end_room = end_room[len(node_dia)+1:]
+Line_Thk = Line_Thk[len(node_dia)+1:]
+
+#Factors the thickness value
+for i in range(len(Line_Thk)):
+    Line_Thk[i]=float(Line_Thk[i])/Line_Thickness_Factor
+
+#Find the index of the points to be connected and join the lines and add index for the colors
+def duplicates(lst, item):
+     return [i for i, x in enumerate(lst) if x==item]
+start = []
+end = []
+for i in range(len(start_room)):
+    start.append(duplicates(Node_Text,start_room[i]))
+    end.append(duplicates(Node_Text,end_room[i]))
+Lines = []
+for i in range(len(start_room)):
+    Lines.append(rs.AddLine(Node_Points[start[i][0]],Node_Points[end[i][0]]))
+
+#Finds curve intersection
+p = []
+q = []
+for i in range(len(start_room)):
+    for j in range(len(Circles)):
+        p.append(rs.CurveCurveIntersection(Lines[i],Circles[j]))
+
+#I wanted to trim them but then realized how much of a hassel that it, so 
+#feel free to go ahead and pursure that, but I'm happy just about here.
+
+
+#for i in range(len(start_room)):
+#    q.append(rs.SplitCurve(Lines[i],p[i][0][7]))
+
+
+#Adding colors to the lines, to switch from start room color to end room
+#color, just change start to end
+Line_Color = []
+for i in start:
+    #for some reason the items in start and end are inside lists, hence the []
+    Line_Color.append(i[0])
+
+#Adding Transformation controls to the diagram
+#I tried to add scaling but that just messed up everything
+
+rs.MoveObject(Circles,(x,y,1))
+rs.MoveObject(Graph_Circles,(x,y,1))
+rs.MoveObject(Node_Points,(x,y,1))
+rs.MoveObject(Lines,(x,y,1))
+
+#cheers!
