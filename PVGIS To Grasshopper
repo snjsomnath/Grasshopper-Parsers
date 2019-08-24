@@ -1,0 +1,53 @@
+import rhinoscriptsyntax as rs
+import csv
+import json
+import urllib2
+import ghpythonlib.treehelpers as th
+#This code uses two opensource API's. Namely the PVGIS web API and the PostcodeIO API
+
+
+#Assigning the PV panel to the surface
+pp = str(rs.Area(geo)/PV_Panel)
+x=12*[0]
+
+#Find azimuth from south
+normal = rs.SurfaceNormal(geo,rs.SurfaceClosestPoint(geo,rs.SurfaceAreaCentroid(geo)[0]))
+aspect = str(rs.VectorAngle((normal[0],normal[1],0),(0,-1,0)))
+
+#Radiation database
+rdb='raddatabase=PVGIS-CMSAF&'
+#Output format
+of='outputformat=basic&'
+#Loss Factor
+loss='loss=12&'
+#Browser tells the API if you want to download a CSV or just read it
+#Since this is the last dataset, the '&' is not required in the end
+browser='browser=0'
+#The PVGIS website format
+pvgis='http://re.jrc.ec.europa.eu/pvgis5/PVcalc.php?'
+#The Postcodeio website format
+postcodeio='https://postcodes.io/postcodes/'
+
+#Creates the URL that can find the lat, long and city from a postcode
+urlpc = postcodeio+postcode
+responsePC  = urllib2.urlopen(urlpc)
+datastore = json.load(responsePC)
+lon = str(datastore['result']['longitude'])+'&'
+lat = str(datastore['result']['latitude'])+'&'
+Lon = str(datastore['result']['longitude'])
+Lat = str(datastore['result']['latitude'])
+#Finds the name of the city
+city = datastore['result']['admin_district']
+#Constructs the PVGIS csv file
+urlpv = pvgis+'lat='+lat+'lon='+lon+rdb+'peakpower='+pp+'&'+'angle='+angle+'&'+'aspect='+aspect+'&'+of+loss+browser
+#print urlpv
+#Fetches information from the PVGIS information File
+responsePV = urllib2.urlopen(urlpv)
+reader = csv.reader(responsePV, delimiter='\t')
+index = 1
+for row in reader:
+    if len(row)==4:
+        x[index-1]=float(row[1])
+        if index==12:
+            break
+        index=index+1
